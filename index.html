@@ -15,10 +15,11 @@
   <meta name="twitter:description" content="手機版免費客語學習詞卡,收錄各分級詞彙。">
   <meta name="twitter:image" content="https://chouinnhakka.github.io/learnhakka/thumbnail.png">
 
-  <!-- 引入 Google Fonts 思源宋體 (Noto Serif TC) -->
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <!-- 引入 Google Fonts 粉圓體 (Huninn) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
   
   <style>
     :root {
@@ -78,7 +79,7 @@
       box-sizing: border-box; 
       margin: 0; 
       padding: 0; 
-      font-family: "Noto Serif TC", "DFKai-SB", "BiauKai", "標楷體", serif; 
+      font-family: "Huninn", "jf-openhuninn", "PingFang TC", "Microsoft JhengHei", sans-serif; 
     }
     
     body { 
@@ -105,6 +106,9 @@
       position: relative; 
     }
     
+    .chouinn-sign { text-align: center; font-size: 12px; letter-spacing: .2em; color: var(--text-sub); opacity: .75; margin-top: 2px; flex: none; }
+    .chouinn-sign .sep { margin: 0 6px; letter-spacing: 0; }
+    .chouinn-sign a { color: inherit; letter-spacing: .05em; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
     .admin-btn { background-color: var(--btn-bg); border: none; border-radius: 10px; padding: 6px 12px; font-size: 14px; color: var(--text-sub); font-weight: bold; cursor: pointer; box-shadow: 0 2px 6px var(--shadow-color); outline: none; }
     
@@ -124,7 +128,7 @@
     .card-back { transform: rotateY(180deg); }
     
     .vocab-title { font-size: 44px; font-weight: bold; color: var(--text-main); letter-spacing: 2px; }
-    .vocab-pinyin { font-size: 22px; color: var(--text-sub); font-family: "Noto Serif TC", "Georgia", serif; margin-top: 2px; }
+    .vocab-pinyin { font-size: 22px; color: var(--text-sub); font-family: "Huninn", "jf-openhuninn", "PingFang TC", "Microsoft JhengHei", sans-serif; margin-top: 2px; }
     .flip-hint { font-size: 16px; color: var(--text-muted); font-weight: bold; }
     
     .definition-container { width: 100%; margin-top: 0; text-align: left; color: var(--text-main); line-height: 1.6; max-height: 260px; overflow-y: auto; }
@@ -132,7 +136,7 @@
     .example-text { font-size: 16px; color: var(--text-sub); padding-top: 8px; border-top: 1px dashed var(--theme-color); white-space: pre-line; }
     
     .card-footer-text { position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--text-muted); padding: 0 12px; }
-    .card-watermark { position: absolute; top: 10px; right: 14px; font-size: 10px; font-family: "Noto Serif TC", "DFKai-SB", "BiauKai", "標楷體", serif; letter-spacing: 0.5px; color: var(--text-muted); opacity: 0.55; pointer-events: none; }
+    .card-watermark { position: absolute; top: 10px; right: 14px; font-size: 10px; font-family: "Huninn", "jf-openhuninn", "PingFang TC", "Microsoft JhengHei", sans-serif; letter-spacing: 0.5px; color: var(--text-muted); opacity: 0.55; pointer-events: none; }
     
     .nav-bar { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
     .nav-btn { flex: 1; background-color: var(--btn-bg); border: none; padding: 14px 12px; border-radius: 12px; font-size: 17px; font-weight: bold; color: var(--text-sub); cursor: pointer; box-shadow: 0 2px 6px var(--shadow-color); transition: all 0.2s; outline: none; }
@@ -148,11 +152,11 @@
     
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 3px; color: var(--text-sub); }
-    .form-control { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--theme-color); background: var(--btn-bg); color: var(--text-main); font-size: 13px; outline: none; font-family: "Noto Serif TC", serif; }
+    .form-control { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--theme-color); background: var(--btn-bg); color: var(--text-main); font-size: 13px; outline: none; font-family: "Huninn", "jf-openhuninn", "PingFang TC", "Microsoft JhengHei", sans-serif; }
     textarea.form-control { resize: vertical; height: 50px; }
     
     .admin-actions { display: flex; gap: 8px; margin-top: 8px; }
-    .admin-btn-action { flex: 1; padding: 8px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; font-family: "Noto Serif TC", serif; }
+    .admin-btn-action { flex: 1; padding: 8px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; font-family: "Huninn", "jf-openhuninn", "PingFang TC", "Microsoft JhengHei", sans-serif; }
     .btn-primary { background-color: var(--theme-color); color: white; }
     .btn-secondary { background-color: var(--btn-bg); color: var(--text-sub); border: 1px solid var(--theme-color); }
     .vocab-count-info { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 6px; }
@@ -217,6 +221,7 @@
     <button class="nav-btn" onclick="prevCard(event)">上一隻詞彙</button>
     <button class="nav-btn" onclick="nextCard(event)">下一隻詞彙</button>
   </div>
+  <div class="chouinn-sign">ChouInn<span class="sep">·</span><a href="#" onclick="window.ChouFeedback&&ChouFeedback.open();return false">意見反應</a></div>
 </div>
 
 <!-- 後臺管理 Modal -->
@@ -492,5 +497,6 @@
     }
   }
 </script>
+<script src="https://chouinn-tools.chouinn-moie.workers.dev/feedback/widget.js" data-tool="客語詞彙閃卡" data-pos="none" defer></script>
 </body>
 </html>
