@@ -166,7 +166,7 @@
 
 <div class="app-container" id="app">
   <div class="top-bar">
-    <button class="admin-btn" onclick="openAdminModal()">⚙️ 詞庫後臺</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="admin-btn" onclick="openAdminModal()">⚙️ 詞庫後臺</button><button class="admin-btn" onclick="openDailyModal()">📅 每日一詞提醒</button></div>
     <div class="theme-select-wrapper">
       <select id="themeSelect" class="theme-select" onchange="changeTheme(this.value)">
         <option value="吊菜色">吊菜色</option>
@@ -266,6 +266,41 @@
       <button class="admin-btn-action btn-secondary" onclick="resetDefaultData()" style="color: #aa3d3d; border-color: #aa3d3d;">🔄 還原預設</button>
     </div>
     <div class="vocab-count-info" id="vocabCountInfo">目前詞庫統計中...</div>
+  </div>
+</div>
+
+<!-- 每日一詞提醒 Modal -->
+<div class="modal-overlay" id="dailyModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">📅 每日一詞提醒</div>
+      <button class="close-btn" onclick="closeDailyModal()">✕</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-sub);line-height:1.7;margin-bottom:8px">做一個行事曆檔案，每天隨機一個客語詞，加進 Google 日曆就會每天通知你。</div>
+    <div class="form-group">
+      <label>要出現哪些級別（可多選）</label>
+      <div id="dailyLevels" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:14px"></div>
+    </div>
+    <div class="form-group">
+      <label>每天幾點通知</label>
+      <input type="time" id="dailyTime" class="form-control" value="08:00">
+    </div>
+    <div class="form-group">
+      <label>從哪一天開始</label>
+      <input type="date" id="dailyStart" class="form-control">
+    </div>
+    <div class="form-group">
+      <label>做幾天</label>
+      <select id="dailyDays" class="form-control"><option value="30">30 天</option><option value="90">90 天</option><option value="180">半年（180 天）</option><option value="365" selected>一年（365 天）</option></select>
+    </div>
+    <button class="admin-btn-action btn-primary" style="width:100%" onclick="makeDailyIcs()">📥 下載行事曆檔（.ics）</button>
+    <div style="font-size:12px;color:var(--text-sub);line-height:1.8;margin-top:10px;background:var(--btn-bg);border-radius:10px;padding:8px 10px">
+      <b>加進 Google 日曆（用電腦做一次就好）</b><br>
+      1. 打開 Google 日曆，左邊「其他日曆」按 ＋ →「建立新日曆」，取名「客語每日一詞」。<br>
+      2. 在這個新日曆的設定裡，「活動通知」設成「0 分鐘前・通知」。<br>
+      3. 右上角齒輪 →「設定」→ 左邊「匯入與匯出」→ 選剛剛下載的檔案，「新增至日曆」選「客語每日一詞」→ 按「匯入」。<br>
+      手機有裝 Google 日曆 App 就會每天跳通知。不想要了，把這個日曆刪掉就好。
+    </div>
   </div>
 </div>
 
@@ -495,6 +530,60 @@
       updateVocabCountInfo();
       alert("已重設為預設詞庫！");
     }
+  }
+
+  // ===== 每日一詞提醒：產生 .ics 行事曆檔 =====
+  function openDailyModal() {
+    const box = document.getElementById("dailyLevels");
+    box.innerHTML = "";
+    Object.keys(vocabDatabase).forEach(lvl => {
+      const n = (vocabDatabase[lvl] || []).length; if (!n) return;
+      const lab = document.createElement("label"); lab.style.cssText = "display:flex;align-items:center;gap:4px;cursor:pointer";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = lvl; cb.checked = lvl === currentLevel;
+      lab.append(cb, document.createTextNode(lvl + "（" + n + "）")); box.append(lab);
+    });
+    const t = new Date(); t.setDate(t.getDate() + 1);
+    document.getElementById("dailyStart").value = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
+    document.getElementById("dailyModal").classList.add("active");
+  }
+  function closeDailyModal() { document.getElementById("dailyModal").classList.remove("active"); }
+  function makeDailyIcs() {
+    const lv = [...document.querySelectorAll("#dailyLevels input:checked")].map(x => x.value);
+    if (!lv.length) { alert("請至少選一個級別"); return; }
+    let pool = []; lv.forEach(l => (vocabDatabase[l] || []).forEach(v => { if (v && v.word) pool.push(Object.assign({ level: l }, v)); }));
+    if (!pool.length) { alert("選的級別沒有詞彙"); return; }
+    const days = +document.getElementById("dailyDays").value || 365;
+    const [hh, mm] = (document.getElementById("dailyTime").value || "08:00").split(":").map(Number);
+    const sd = document.getElementById("dailyStart").value; if (!sd) { alert("請選開始日期"); return; }
+    const [y0, m0, d0] = sd.split("-").map(Number);
+    // 洗牌：同一輪內不重複
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    let bag = shuffle(pool.slice());
+    const p2 = n => String(n).padStart(2, "0");
+    const esc = t => String(t || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    const fold = line => { const out = []; let cur = "", bytes = 0; for (const ch of line) { const b = new TextEncoder().encode(ch).length; if (bytes + b > 73) { out.push(cur); cur = " "; bytes = 1; } cur += ch; bytes += b; } out.push(cur); return out.join("\r\n"); };
+    const now = new Date(), stamp = now.getUTCFullYear() + p2(now.getUTCMonth() + 1) + p2(now.getUTCDate()) + "T" + p2(now.getUTCHours()) + p2(now.getUTCMinutes()) + p2(now.getUTCSeconds()) + "Z";
+    const uidBase = Date.now().toString(36);
+    const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ChouInn//Hakka Daily Word//ZH", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:客語每日一詞", "X-WR-TIMEZONE:Asia/Taipei",
+      "BEGIN:VTIMEZONE", "TZID:Asia/Taipei", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0800", "TZOFFSETTO:+0800", "TZNAME:CST", "END:STANDARD", "END:VTIMEZONE"];
+    for (let i = 0; i < days; i++) {
+      if (!bag.length) bag = shuffle(pool.slice());
+      const v = bag.pop();
+      const d = new Date(y0, m0 - 1, d0 + i);
+      const ds = d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate());
+      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm + 10);
+      const de = end.getFullYear() + p2(end.getMonth() + 1) + p2(end.getDate()) + "T" + p2(end.getHours()) + p2(end.getMinutes()) + "00";
+      const title = "客語每日一詞：" + v.word + (v.pinyin ? "（" + v.pinyin + "）" : "");
+      const desc = v.word + (v.pinyin ? "　" + v.pinyin : "") + "\n華語：" + (v.def || "") + (v.example ? "\n例句：" + v.example : "") + "\n級別：" + v.level + "\n\n客語隨機閃卡 https://chouinnhakka.github.io/learnhakka/";
+      L.push("BEGIN:VEVENT", "UID:" + uidBase + "-" + i + "@chouinn-daily-word", "DTSTAMP:" + stamp,
+        "DTSTART;TZID=Asia/Taipei:" + ds + "T" + p2(hh) + p2(mm) + "00", "DTEND;TZID=Asia/Taipei:" + de,
+        fold("SUMMARY:" + esc(title)), fold("DESCRIPTION:" + esc(desc)), "TRANSP:TRANSPARENT",
+        "BEGIN:VALARM", "ACTION:DISPLAY", fold("DESCRIPTION:" + esc(title)), "TRIGGER:PT0M", "END:VALARM", "END:VEVENT");
+    }
+    L.push("END:VCALENDAR");
+    const blob = new Blob([L.join("\r\n") + "\r\n"], { type: "text/calendar;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "客語每日一詞-" + sd + "起" + days + "天.ics";
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
 </script>
 <script src="https://chouinn-tools.chouinn-moie.workers.dev/feedback/widget.js" data-tool="客語詞彙閃卡" data-pos="none" defer></script>
