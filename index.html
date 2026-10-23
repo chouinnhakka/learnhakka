@@ -276,7 +276,7 @@
       <div class="modal-title">📅 每日一詞提醒</div>
       <button class="close-btn" onclick="closeDailyModal()">✕</button>
     </div>
-    <div style="font-size:13px;color:var(--text-sub);line-height:1.7;margin-bottom:8px">做一個行事曆檔案，每天隨機一個客語詞，加進 Google 日曆就會每天通知你。</div>
+    <div style="font-size:13px;color:var(--text-sub);line-height:1.7;margin-bottom:8px">按一下就幫你在 Google 日曆建好「客語每日一詞」，每天隨機一個客語詞，時間到手機就會通知你。</div>
     <div class="form-group">
       <label>要出現哪些級別（可多選）</label>
       <div id="dailyLevels" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:14px"></div>
@@ -293,13 +293,13 @@
       <label>做幾天</label>
       <select id="dailyDays" class="form-control"><option value="30">30 天</option><option value="90">90 天</option><option value="180">半年（180 天）</option><option value="365" selected>一年（365 天）</option></select>
     </div>
-    <button class="admin-btn-action btn-primary" style="width:100%" onclick="makeDailyIcs()">📥 下載行事曆檔（.ics）</button>
-    <div style="font-size:12px;color:var(--text-sub);line-height:1.8;margin-top:10px;background:var(--btn-bg);border-radius:10px;padding:8px 10px">
-      <b>加進 Google 日曆（用電腦做一次就好）</b><br>
-      1. 打開 Google 日曆，左邊「其他日曆」按 ＋ →「建立新日曆」，取名「客語每日一詞」。<br>
-      2. 在這個新日曆的設定裡，「活動通知」設成「0 分鐘前・通知」。<br>
-      3. 右上角齒輪 →「設定」→ 左邊「匯入與匯出」→ 選剛剛下載的檔案，「新增至日曆」選「客語每日一詞」→ 按「匯入」。<br>
-      手機有裝 Google 日曆 App 就會每天跳通知。不想要了，把這個日曆刪掉就好。
+    <button class="admin-btn-action btn-primary" id="gcalBtn" style="width:100%;font-size:15px;padding:10px" onclick="dailyToGcal()">📅 一鍵加入 Google 日曆</button>
+    <div id="gcalMsg" role="status" style="font-size:13px;line-height:1.7;margin-top:8px;color:var(--text-main)"></div>
+    <div style="font-size:12px;color:var(--text-sub);line-height:1.8;margin-top:8px">
+      第一次按會跳出 Google 登入視窗，選你的帳號並按「允許」就好。網站只能管理它自己建的「客語每日一詞」日曆，看不到你其他的行程。<br>
+      想換時間或級別：改好再按一次，會整個換新。<br>
+      <button type="button" onclick="dailyStopGcal()" style="border:0;background:none;padding:0;color:var(--text-sub);text-decoration:underline;cursor:pointer;font:inherit">停止每日提醒（刪掉這個日曆）</button>
+      ・<button type="button" onclick="makeDailyIcs()" style="border:0;background:none;padding:0;color:var(--text-sub);text-decoration:underline;cursor:pointer;font:inherit">改用下載 .ics 檔</button>
     </div>
   </div>
 </div>
@@ -545,20 +545,96 @@
     const t = new Date(); t.setDate(t.getDate() + 1);
     document.getElementById("dailyStart").value = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
     document.getElementById("dailyModal").classList.add("active");
+    loadGis().catch(() => {});
+  }
+
+  // ===== 一鍵加入 Google 日曆（Google Calendar API；只建立與管理自己的「客語每日一詞」日曆）=====
+  const GCAL_CLIENT = "907176813752-0uqnt03757gl1o28b4c0lg2mubil397h.apps.googleusercontent.com";
+  const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+  let gTokenClient = null, gToken = null;
+  function loadGis() {
+    return new Promise((ok, no) => {
+      if (window.google && google.accounts && google.accounts.oauth2) return ok();
+      const s = document.createElement("script"); s.src = "https://accounts.google.com/gsi/client"; s.async = true;
+      s.onload = () => ok(); s.onerror = () => no(new Error("連不到 Google，請確認網路後再試")); document.head.append(s);
+    });
+  }
+  function gcalMsg(t, err) { const m = document.getElementById("gcalMsg"); m.textContent = t; m.style.color = err ? "#aa3d3d" : "var(--text-main)"; }
+  function getGToken() {
+    return new Promise((ok, no) => {
+      if (gToken && gToken.exp > Date.now() + 60000) return ok(gToken.t);
+      gTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GCAL_CLIENT, scope: GCAL_SCOPE,
+        callback: r => { if (r.error || !google.accounts.oauth2.hasGrantedAllScopes(r, GCAL_SCOPE)) return no(new Error(r.error === "access_denied" ? "你沒有按「允許」，所以沒辦法建立日曆" : "Google 沒有給權限，請再按一次並勾選允許")); gToken = { t: r.access_token, exp: Date.now() + (r.expires_in || 3000) * 1000 }; ok(gToken.t); },
+        error_callback: e => no(new Error(e && e.type === "popup_closed" ? "Google 登入視窗被關掉了，請再按一次" : e && e.type === "popup_failed_to_open" ? "Google 登入視窗被瀏覽器擋住了，請允許彈出視窗後再按一次" : "Google 登入沒有完成，請再按一次")) });
+      gTokenClient.requestAccessToken();
+    });
+  }
+  async function gapi(method, path, body, tok, tries = 0) {
+    const r = await fetch("https://www.googleapis.com/calendar/v3/" + path, { method, headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    if ((r.status === 403 || r.status === 429 || r.status >= 500) && tries < 6) { await new Promise(z => setTimeout(z, 800 * Math.pow(2, tries) + Math.random() * 400)); return gapi(method, path, body, tok, tries + 1); }
+    if (method === "DELETE" && (r.status === 404 || r.status === 410)) return null;
+    if (!r.ok) { let m = ""; try { m = (await r.json()).error.message; } catch (e) {} throw new Error("Google 日曆回應錯誤（" + r.status + "）" + (m ? "：" + m : "")); }
+    return r.status === 204 ? null : r.json();
+  }
+  let gcalBusy = false;
+  async function dailyToGcal() {
+    if (gcalBusy) return; const P = dailyPlan(); if (!P) return;
+    const btn = document.getElementById("gcalBtn"); gcalBusy = true; btn.disabled = true;
+    try {
+      gcalMsg("連線到 Google…"); await loadGis();
+      const tok = await getGToken();
+      const old = localStorage.getItem("hakka_daily_cal");
+      if (old) { gcalMsg("移除舊的每日一詞日曆…"); await gapi("DELETE", "calendars/" + encodeURIComponent(old), null, tok); localStorage.removeItem("hakka_daily_cal"); }
+      gcalMsg("建立「客語每日一詞」日曆…");
+      const cal = await gapi("POST", "calendars", { summary: "客語每日一詞", description: "客語隨機詞卡每天送你一個客語詞。https://chouinnhakka.github.io/learnhakka/", timeZone: "Asia/Taipei" }, tok);
+      localStorage.setItem("hakka_daily_cal", cal.id);
+      const p2 = n => String(n).padStart(2, "0");
+      let done = 0, idx = 0;
+      const one = async it => {
+        const st = it.y + "-" + p2(it.m) + "-" + p2(it.d) + "T" + p2(P.hh) + ":" + p2(P.mm) + ":00";
+        const e = new Date(it.y, it.m - 1, it.d, P.hh, P.mm + 10), en = e.getFullYear() + "-" + p2(e.getMonth() + 1) + "-" + p2(e.getDate()) + "T" + p2(e.getHours()) + ":" + p2(e.getMinutes()) + ":00";
+        await gapi("POST", "calendars/" + encodeURIComponent(cal.id) + "/events", { summary: it.title, description: it.desc, start: { dateTime: st, timeZone: "Asia/Taipei" }, end: { dateTime: en, timeZone: "Asia/Taipei" },
+          transparency: "transparent", reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 0 }] } }, tok);
+        done++; if (done % 5 === 0 || done === P.list.length) gcalMsg("加入每天的詞… " + done + " / " + P.list.length + " 天（請不要關掉這個頁面）");
+      };
+      const worker = async () => { while (idx < P.list.length) { const it = P.list[idx++]; await one(it); } };
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      gcalMsg("✅ 完成！已在 Google 日曆建立「客語每日一詞」，從 " + P.sd + " 起每天 " + p2(P.hh) + ":" + p2(P.mm) + " 會通知你（共 " + P.list.length + " 天）。手機要有裝 Google 日曆 App 才會跳通知。");
+    } catch (e) { gcalMsg("沒有完成：" + e.message, true); }
+    finally { gcalBusy = false; btn.disabled = false; }
+  }
+  async function dailyStopGcal() {
+    const id = localStorage.getItem("hakka_daily_cal");
+    if (!id) { gcalMsg("這台裝置沒有建立過每日一詞日曆。如果是用別台裝置建的，請到 Google 日曆左邊找到「客語每日一詞」→ 三個點 →「設定」→ 最下面「移除日曆」。"); return; }
+    if (!confirm("確定要刪掉「客語每日一詞」日曆，停止每天的提醒嗎？")) return;
+    try { gcalMsg("刪除中…"); await loadGis(); const tok = await getGToken(); await gapi("DELETE", "calendars/" + encodeURIComponent(id), null, tok); localStorage.removeItem("hakka_daily_cal"); gcalMsg("已停止每日提醒，日曆已刪除。"); }
+    catch (e) { gcalMsg("沒有完成：" + e.message, true); }
   }
   function closeDailyModal() { document.getElementById("dailyModal").classList.remove("active"); }
-  function makeDailyIcs() {
+  /* 依選項排好每天的詞（同一輪內不重複） */
+  function dailyPlan() {
     const lv = [...document.querySelectorAll("#dailyLevels input:checked")].map(x => x.value);
-    if (!lv.length) { alert("請至少選一個級別"); return; }
+    if (!lv.length) { alert("請至少選一個級別"); return null; }
     let pool = []; lv.forEach(l => (vocabDatabase[l] || []).forEach(v => { if (v && v.word) pool.push(Object.assign({ level: l }, v)); }));
-    if (!pool.length) { alert("選的級別沒有詞彙"); return; }
+    if (!pool.length) { alert("選的級別沒有詞彙"); return null; }
     const days = +document.getElementById("dailyDays").value || 365;
     const [hh, mm] = (document.getElementById("dailyTime").value || "08:00").split(":").map(Number);
-    const sd = document.getElementById("dailyStart").value; if (!sd) { alert("請選開始日期"); return; }
+    const sd = document.getElementById("dailyStart").value; if (!sd) { alert("請選開始日期"); return null; }
     const [y0, m0, d0] = sd.split("-").map(Number);
-    // 洗牌：同一輪內不重複
     const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    let bag = shuffle(pool.slice());
+    let bag = shuffle(pool.slice()); const list = [];
+    for (let i = 0; i < days; i++) {
+      if (!bag.length) bag = shuffle(pool.slice());
+      const v = bag.pop(), d = new Date(y0, m0 - 1, d0 + i);
+      list.push({ v, y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate(),
+        title: "客語每日一詞：" + v.word + (v.pinyin ? "（" + v.pinyin + "）" : ""),
+        desc: v.word + (v.pinyin ? "　" + v.pinyin : "") + "\n華語：" + (v.def || "") + (v.example ? "\n例句：" + v.example : "") + "\n級別：" + v.level + "\n\n客語隨機詞卡 https://chouinnhakka.github.io/learnhakka/" });
+    }
+    return { list, hh, mm, sd, days };
+  }
+  function makeDailyIcs() {
+    const P = dailyPlan(); if (!P) return;
+    const { hh, mm, sd, days } = P; let k = 0;
     const p2 = n => String(n).padStart(2, "0");
     const esc = t => String(t || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
     const fold = line => { const out = []; let cur = "", bytes = 0; for (const ch of line) { const b = new TextEncoder().encode(ch).length; if (bytes + b > 73) { out.push(cur); cur = " "; bytes = 1; } cur += ch; bytes += b; } out.push(cur); return out.join("\r\n"); };
@@ -566,15 +642,13 @@
     const uidBase = Date.now().toString(36);
     const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ChouInn//Hakka Daily Word//ZH", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:客語每日一詞", "X-WR-TIMEZONE:Asia/Taipei",
       "BEGIN:VTIMEZONE", "TZID:Asia/Taipei", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0800", "TZOFFSETTO:+0800", "TZNAME:CST", "END:STANDARD", "END:VTIMEZONE"];
-    for (let i = 0; i < days; i++) {
-      if (!bag.length) bag = shuffle(pool.slice());
-      const v = bag.pop();
-      const d = new Date(y0, m0 - 1, d0 + i);
+    for (const it of P.list) {
+      const i = k++, v = it.v;
+      const d = new Date(it.y, it.m - 1, it.d);
       const ds = d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate());
       const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm + 10);
       const de = end.getFullYear() + p2(end.getMonth() + 1) + p2(end.getDate()) + "T" + p2(end.getHours()) + p2(end.getMinutes()) + "00";
-      const title = "客語每日一詞：" + v.word + (v.pinyin ? "（" + v.pinyin + "）" : "");
-      const desc = v.word + (v.pinyin ? "　" + v.pinyin : "") + "\n華語：" + (v.def || "") + (v.example ? "\n例句：" + v.example : "") + "\n級別：" + v.level + "\n\n客語隨機閃卡 https://chouinnhakka.github.io/learnhakka/";
+      const title = it.title, desc = it.desc;
       L.push("BEGIN:VEVENT", "UID:" + uidBase + "-" + i + "@chouinn-daily-word", "DTSTAMP:" + stamp,
         "DTSTART;TZID=Asia/Taipei:" + ds + "T" + p2(hh) + p2(mm) + "00", "DTEND;TZID=Asia/Taipei:" + de,
         fold("SUMMARY:" + esc(title)), fold("DESCRIPTION:" + esc(desc)), "TRANSP:TRANSPARENT",
@@ -586,6 +660,6 @@
     document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
 </script>
-<script src="https://chouinn-tools.chouinn-moie.workers.dev/feedback/widget.js" data-tool="客語詞彙閃卡" data-pos="none" defer></script>
+<script src="https://chouinn-tools.chouinn-moie.workers.dev/feedback/widget.js" data-tool="客語隨機詞卡" data-pos="none" defer></script>
 </body>
 </html>
