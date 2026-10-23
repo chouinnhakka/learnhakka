@@ -16,6 +16,10 @@
   <meta name="twitter:image" content="https://chouinnhakka.github.io/learnhakka/thumbnail.png">
 
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="客語詞卡">
   <!-- 引入 Google Fonts 思源宋體 (Noto Serif TC) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -276,11 +280,24 @@
       <div class="modal-title">📅 每日一詞提醒</div>
       <button class="close-btn" onclick="closeDailyModal()">✕</button>
     </div>
-    <div style="font-size:13px;color:var(--text-sub);line-height:1.7;margin-bottom:8px">按一下就幫你在 Google 日曆建好「客語每日一詞」，每天隨機一個客語詞，時間到手機就會通知你。</div>
     <div class="form-group">
       <label>要出現哪些級別（可多選）</label>
       <div id="dailyLevels" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:14px"></div>
     </div>
+    <div style="background:var(--btn-bg);border-radius:12px;padding:10px 12px;margin:2px 0 12px">
+      <div style="font-weight:bold;color:var(--text-main);margin-bottom:4px">📱 方法一：網站直接通知到手機</div>
+      <div style="font-size:12.5px;color:var(--text-sub);line-height:1.7;margin-bottom:8px">每天在你選的時間，手機跳出一個隨機客語詞。不用登入、不用日曆。</div>
+      <div id="pushIos" hidden style="font-size:12.5px;line-height:1.8;color:var(--text-main);background:var(--card-bg);border-radius:10px;padding:8px 10px;margin-bottom:8px">
+        <b>iPhone／iPad 要先做一次：</b><br>1. 用 Safari 打開這個網頁。<br>2. 按下方的「分享」按鈕（方框加向上箭頭）。<br>3. 選「加入主畫面」→「新增」。<br>4. 從主畫面的「客語詞卡」圖示打開，再來這裡按「開啟每天通知」。</div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label for="pushTime">每天幾點通知</label>
+        <select id="pushTime" class="form-control"></select>
+      </div>
+      <button class="admin-btn-action btn-primary" id="pushOn" style="width:100%;font-size:15px;padding:10px" onclick="pushEnable()">🔔 開啟每天通知</button>
+      <div id="pushMore" hidden style="display:flex;gap:8px;margin-top:8px"><button class="admin-btn-action btn-secondary" style="flex:1" onclick="pushTest()">傳一則試試看</button><button class="admin-btn-action btn-secondary" style="flex:1;color:#aa3d3d;border-color:#aa3d3d" onclick="pushDisable()">停止通知</button></div>
+      <div id="pushMsg" role="status" style="font-size:13px;line-height:1.7;margin-top:6px;color:var(--text-main)"></div>
+    </div>
+    <div style="font-weight:bold;color:var(--text-main);margin:4px 0 6px">📅 方法二：加入 Google 日曆</div>
     <div class="form-group">
       <label>每天幾點通知</label>
       <input type="time" id="dailyTime" class="form-control" value="08:00">
@@ -331,6 +348,7 @@
     updateLevelTabs();
     initDailyCard();
     updateVocabCountInfo();
+    showWordFromUrl();
   };
 
   function setLevel(level) {
@@ -546,6 +564,7 @@
     document.getElementById("dailyStart").value = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0");
     document.getElementById("dailyModal").classList.add("active");
     loadGis().catch(() => {});
+    pushInit();
   }
 
   // ===== 一鍵加入 Google 日曆（Google Calendar API；只建立與管理自己的「客語每日一詞」日曆）=====
@@ -610,6 +629,69 @@
     try { gcalMsg("刪除中…"); await loadGis(); const tok = await getGToken(); await gapi("DELETE", "calendars/" + encodeURIComponent(id), null, tok); localStorage.removeItem("hakka_daily_cal"); gcalMsg("已停止每日提醒，日曆已刪除。"); }
     catch (e) { gcalMsg("沒有完成：" + e.message, true); }
   }
+
+  // ===== 方法一：網站直接推播通知（伺服器每 30 分鐘檢查一次，到你選的時間就送）=====
+  const PUSH_API = "https://chouinn-tools.chouinn-moie.workers.dev/push/api";
+  async function papi(fn, ...args) {
+    const r = await fetch(PUSH_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fn, args }) });
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error(j.error || "連線失敗（" + r.status + "）"); return j.result;
+  }
+  function pmsg(t, err) { const m = document.getElementById("pushMsg"); m.textContent = t; m.style.color = err ? "#aa3d3d" : "var(--text-main)"; }
+  const pushOk = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  async function swReg() { return navigator.serviceWorker.register("sw.js", { scope: "./" }).then(() => navigator.serviceWorker.ready); }
+  async function pushInit() {
+    const sel = document.getElementById("pushTime");
+    if (!sel.options.length) { for (let h = 5; h <= 23; h++) for (const m of ["00", "30"]) { const v = String(h).padStart(2, "0") + ":" + m; sel.add(new Option((h < 12 ? "上午 " : "下午 ") + ((h + 11) % 12 + 1) + ":" + m, v)); } sel.value = "08:00"; }
+    document.getElementById("pushIos").hidden = !(isIOS() && !standalone());
+    if (!pushOk()) { pmsg(isIOS() && !standalone() ? "請先照上面的步驟把網頁加入主畫面。" : "這個瀏覽器不支援通知，請改用手機的 Chrome 或 Safari，或用方法二的 Google 日曆。", true); document.getElementById("pushOn").disabled = true; return; }
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("./"); const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) { const st = await papi("status", sub.endpoint);
+        if (st) { sel.value = st.hhmm; document.getElementById("pushMore").hidden = false; document.getElementById("pushOn").textContent = "🔔 更新通知時間和級別";
+          pmsg("✅ 已開啟：每天 " + st.hhmm + " 通知" + (st.levels.length ? "（" + st.levels.join("、") + "）" : "") + "。"); } }
+    } catch (e) {}
+  }
+  async function pushEnable() {
+    const lv = [...document.querySelectorAll("#dailyLevels input:checked")].map(x => x.value);
+    if (!lv.length) { pmsg("請至少選一個級別", true); return; }
+    const btn = document.getElementById("pushOn"); btn.disabled = true;
+    try {
+      pmsg("設定中…");
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") throw new Error(perm === "denied" ? "通知被封鎖了。請到瀏覽器或手機的設定裡，允許這個網站傳送通知，再按一次。" : "你沒有按「允許」，所以沒辦法通知");
+      const reg = await swReg();
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) { const key = await papi("key"); const raw = atob(key.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((key.length + 3) % 4));
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, c => c.charCodeAt(0)) }); }
+      const hhmm = document.getElementById("pushTime").value;
+      await papi("subscribe", sub.toJSON(), hhmm, lv);
+      document.getElementById("pushMore").hidden = false; btn.textContent = "🔔 更新通知時間和級別";
+      pmsg("✅ 完成！每天 " + hhmm + " 會通知你一個客語詞（" + lv.join("、") + "）。可以按「傳一則試試看」確認收得到。");
+    } catch (e) { pmsg("沒有完成：" + e.message, true); }
+    finally { btn.disabled = false; }
+  }
+  async function pushTest() {
+    try { const reg = await navigator.serviceWorker.getRegistration("./"); const sub = reg && await reg.pushManager.getSubscription(); if (!sub) throw new Error("還沒有開啟通知");
+      pmsg("傳送中…"); await papi("test", sub.endpoint); pmsg("已經送出，幾秒內手機會跳出通知。沒收到的話，檢查手機的「專注模式」或通知設定。"); }
+    catch (e) { pmsg("沒有完成：" + e.message, true); }
+  }
+  async function pushDisable() {
+    if (!confirm("確定要停止每天的通知嗎？")) return;
+    try { const reg = await navigator.serviceWorker.getRegistration("./"); const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) { await papi("unsubscribe", sub.endpoint).catch(() => {}); await sub.unsubscribe(); }
+      document.getElementById("pushMore").hidden = true; document.getElementById("pushOn").textContent = "🔔 開啟每天通知"; pmsg("已停止通知。"); }
+    catch (e) { pmsg("沒有完成：" + e.message, true); }
+  }
+  // 從通知點進來：直接顯示那個詞
+  function showWordFromUrl() {
+    const w = new URLSearchParams(location.search).get("w"); if (!w) return;
+    for (const lvl in vocabDatabase) { const i = (vocabDatabase[lvl] || []).findIndex(v => v.word === w);
+      if (i >= 0) { currentLevel = lvl; currentIndex = i; updateLevelTabs(); resetCardFlip(); renderCard(); break; } }
+    history.replaceState(null, "", location.pathname);
+  }
   function closeDailyModal() { document.getElementById("dailyModal").classList.remove("active"); }
   /* 依選項排好每天的詞（同一輪內不重複） */
   function dailyPlan() {
@@ -661,5 +743,6 @@
   }
 </script>
 <script src="https://chouinn-tools.chouinn-moie.workers.dev/feedback/widget.js" data-tool="客語隨機詞卡" data-pos="none" defer></script>
+<script src="https://chouinn-tools.chouinn-moie.workers.dev/stats/t.js" data-site="客語隨機詞卡" defer></script>
 </body>
 </html>
