@@ -1,4 +1,4 @@
-/* 客語隨機詞卡：每日一詞通知。伺服器只送一個「該通知了」的訊號，這裡再去拿今天的詞。 */
+/* 客語分級隨機詞卡：每日一詞通知。伺服器只送一個「該通知了」的訊號，這裡再去拿今天的詞。 */
 const API = 'https://chouinn-tools.chouinn-moie.workers.dev/push/api';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
