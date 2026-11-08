@@ -23,7 +23,12 @@
   <!-- 引入 Google Fonts 思源宋體 (Noto Serif TC) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=block" rel="stylesheet">
+  <!-- 思源宋體下載好之前先不顯示畫面，避免先閃出標楷體（最多等 2.5 秒） -->
+  <style>html.fload body{opacity:0}html body{transition:opacity .18s ease}</style>
+  <script>(function(){var h=document.documentElement;h.classList.add('fload');var done=false;function show(){if(done)return;done=true;h.classList.remove('fload');}
+  setTimeout(show,2500);document.addEventListener('DOMContentLoaded',function(){if(!document.fonts){show();return;}
+  var t=(document.body.innerText||'').slice(0,4000)+'客語分級隨機詞卡';Promise.all([document.fonts.load('400 16px "Noto Serif TC"',t),document.fonts.load('700 16px "Noto Serif TC"',t)]).then(function(){return document.fonts.ready}).then(show,show);});})();</script>
   
   <style>
     :root {
